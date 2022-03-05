@@ -10,6 +10,7 @@
 sudo sshfs -o allow_other adhofer@ImageFactData.cs.univie.ac.at:/./dataset /mnt/ImageFactData
 conda activate sg
 cd graph-rcnn.pytorch/
+az login
 ###################################################################
 
 cd ~
