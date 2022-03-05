@@ -1,11 +1,12 @@
 DATASET:
   NAME: "vg"
   MODE: "benchmark"
-  TRAIN_BATCH_SIZE: 8
+  PATH: "/mnt/ImageFactData/"
+  TRAIN_BATCH_SIZE: 4
   TEST_BATCH_SIZE: 1
 MODEL:
   WEIGHT_IMG: "catalog://ImageNetPretrained/MSRA/R-101"
-  WEIGHT_DET: "checkpoints/vg_benchmark_object/R-101-C4/faster_rcnn/BatchSize_6/Base_LR_0.005/checkpoint_0099999.pth"
+  WEIGHT_DET: "checkpoints/vg_benchmark_object/R-101-C4/sg_baseline_joint_0/BatchSize_2/Base_LR_0.005/checkpoint_final.pth"
   RELATION_ON: True
   ALGORITHM: "sg_baseline"
   USE_FREQ_PRIOR: False
@@ -33,6 +34,6 @@ MODEL:
     GRCNN_SCORE_UPDATE_STEP: 2
 SOLVER:
   BASE_LR: 5e-3
-  MAX_ITER: 40000
-  STEPS: (20000,30000)
+  MAX_ITER: 4000
+  STEPS: (2000,300)
   CHECKPOINT_PERIOD: 1000

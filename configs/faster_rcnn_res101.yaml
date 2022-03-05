@@ -1,7 +1,7 @@
 DATASET:
   NAME: "vg"
   MODE: "benchmark"
-  PATH: "datasets/vg_bm"
+  PATH: "/mnt/ImageFactData/"
   TRAIN_BATCH_SIZE: 2
   TEST_BATCH_SIZE: 1
 MODEL:
@@ -16,6 +16,7 @@ MODEL:
     NUM_CLASSES: 51
 SOLVER:
   BASE_LR: 5e-3
-  MAX_ITER: 100000
-  STEPS: (70000,90000)
+  # MAX_ITER: 100000
+  MAX_ITER: 10000
+  STEPS: (7000,9000)
   CHECKPOINT_PERIOD: 5000
