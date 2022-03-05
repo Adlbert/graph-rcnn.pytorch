@@ -11,9 +11,13 @@ from .scene_parser.parser import build_scene_parser_optimizer
 from .scene_parser.rcnn.utils.metric_logger import MetricLogger
 from .scene_parser.rcnn.utils.timer import Timer, get_time_str
 from .scene_parser.rcnn.utils.comm import synchronize, all_gather, is_main_process, get_world_size
-from .scene_parser.rcnn.utils.visualize import select_top_predictions, overlay_boxes, overlay_class_names
+from .scene_parser.rcnn.utils.visualize import select_top_predictions, select_top_pred_predictions, overlay_boxes, overlay_lines, overlay_class_names, overlay_pred_names, generate_graph
 from .data.evaluation import evaluate, evaluate_sg
 from .utils.box import bbox_overlaps
+import networkx as nx
+import matplotlib
+matplotlib.use('agg')
+import matplotlib.pyplot as plt
 
 class SceneGraphGeneration:
     """
@@ -193,17 +197,26 @@ class SceneGraphGeneration:
         predictions = [predictions[i] for i in image_ids]
         return predictions
 
-    def visualize_detection(self, dataset, img_ids, imgs, predictions):
+    def visualize_detection(self, dataset, img_ids, imgs, predictions, pred_predictions):
         visualize_folder = "visualize"
         if not os.path.exists(visualize_folder):
             os.mkdir(visualize_folder)
-        for i, prediction in enumerate(predictions):
+        for i, (prediction, pred_prediction) in enumerate(zip(predictions, pred_predictions)):
             top_prediction = select_top_predictions(prediction)
+            top_pred_prediction = select_top_pred_predictions(pred_prediction)
             img = imgs.tensors[i].permute(1, 2, 0).contiguous().cpu().numpy() + np.array(self.cfg.INPUT.PIXEL_MEAN).reshape(1, 1, 3)
             result = img.copy()
+            result = cv2.cvtColor(result.astype('float32'), cv2.COLOR_RGB2BGR)
             result = overlay_boxes(result, top_prediction)
             result = overlay_class_names(result, top_prediction, dataset.ind_to_classes)
+            result = overlay_lines(result, top_pred_prediction)
+            result = overlay_pred_names(result, top_pred_prediction, dataset.ind_to_predicates)
             cv2.imwrite(os.path.join(visualize_folder, "detection_{}.jpg".format(img_ids[i])), result)
+
+            graph, labeldict = generate_graph(top_prediction, top_pred_prediction, dataset.ind_to_classes, dataset.ind_to_predicates)
+            nx.draw(graph, labels=labeldict, with_labels = True)
+            plt.savefig(os.path.join(visualize_folder, "detection_graph_{}.jpg".format(img_ids[i])))
+            plt.close()
 
     def test(self, timer=None, visualize=False):
         """
@@ -241,7 +254,7 @@ class SceneGraphGeneration:
                     timer.toc()
                 output = [o.to(cpu_device) for o in output]
                 if visualize:
-                    self.visualize_detection(self.data_loader_test.dataset, image_ids, imgs, output)
+                    self.visualize_detection(self.data_loader_test.dataset, image_ids, imgs, output, output_pred)
             results_dict.update(
                 {img_id: result for img_id, result in zip(image_ids, output)}
             )
