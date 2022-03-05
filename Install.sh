@@ -5,6 +5,13 @@
 #gcc:  5.3.1 
 #g++: 5.3.1 
 
+###################################################################
+                            #On Restart
+sudo sshfs -o allow_other adhofer@ImageFactData.cs.univie.ac.at:/./dataset /mnt/ImageFactData
+conda activate sg
+cd graph-rcnn.pytorch/
+###################################################################
+
 cd ~
 
 sudo adduser admin92
@@ -36,6 +43,7 @@ sudo mkdir /mnt/ImageFactData
 # echo 'rm -rf /mnt/ImageFactData/*' >> ~/.bashrc
 # echo 'rm -rf /mnt/ImageFactData/' >> ~/.bashrc
 # echo 'mkdir /mnt/ImageFactData/' >> ~/.bashrc
+#sudo sshfs -o allow_other adhofer@ImageFactData.cs.univie.ac.at:/./dataset /mnt/ImageFactData
 echo <vm_pwd> | sudo sshfs -o allow_other -o password_stdin adhofer@ImageFactData.cs.univie.ac.at:/./dataset /mnt/ImageFactData
 echo 'sudo sshfs -o allow_other -o password_stdin adhofer@ImageFactData.cs.univie.ac.at:/./dataset /mnt/ImageFactData <<< <vm_pwd>' >> ~/.bashrc
 source ~/.bashrc
