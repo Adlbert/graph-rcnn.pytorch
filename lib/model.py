@@ -213,7 +213,7 @@ class SceneGraphGeneration:
             result = overlay_pred_names(result, top_pred_prediction, dataset.ind_to_predicates)
             cv2.imwrite(os.path.join(visualize_folder, "detection_{}.jpg".format(img_ids[i])), result)
 
-            graph, labeldict = generate_graph(top_prediction, top_pred_prediction, dataset.ind_to_classes, dataset.ind_to_predicates)
+            graph, labeldict, edge_labeldict = generate_graph(top_prediction, top_pred_prediction, dataset.ind_to_classes, dataset.ind_to_predicates)
             nx.draw(graph, labels=labeldict, with_labels = True)
             plt.savefig(os.path.join(visualize_folder, "detection_graph_{}.jpg".format(img_ids[i])))
             plt.close()
