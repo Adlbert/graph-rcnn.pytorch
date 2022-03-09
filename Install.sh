@@ -7,6 +7,7 @@
 
 ###################################################################
                             #On Restart
+sudo mkdir /mnt/ImageFactData
 sudo sshfs -o allow_other adhofer@ImageFactData.cs.univie.ac.at:/./dataset /mnt/ImageFactData
 conda activate sg
 cd graph-rcnn.pytorch/
@@ -98,3 +99,4 @@ python main.py --config-file configs/faster_rcnn_res101.yaml --inference --insta
 #python -m torch.distributed.launch --nproc_per_node=2 main.py --config-file configs/faster_rcnn_res101.yaml
 #Train SG
 python main.py --config-file configs/sgg_res101_step.yaml
+ python main.py --config-file configs/sgg_res101_step.yaml --resume checkpoints/vg_benchmark_object/R-101-C4/sg_baseline_relpn_step_0/BatchSize_4/Base_LR_0.005/checkpoint_0013499.pth
