@@ -4,7 +4,7 @@ import numpy as np
 import networkx as nx
 
 
-def select_top_pred_predictions(predictions, confidence_threshold=0.0):
+def select_top_pred_predictions(predictions, confidence_threshold=0.2):
     """
     Select only predictions which have a `score` > self.confidence_threshold,
     and returns the predictions in descending order of score
@@ -17,18 +17,15 @@ def select_top_pred_predictions(predictions, confidence_threshold=0.0):
             the BoxList via `prediction.fields()`
     """
     scores = predictions.get_field("scores")
-    scores = torch.tensor([torch.mean(score) for score in scores])
-    den = torch.max(scores)-torch.min(scores)
-    if den == 0:
-        den = 1
-    scores = (scores - torch.min(scores))/den
+    scores = scores.max(1)[0]
     keep = torch.nonzero(scores > confidence_threshold).squeeze(1)
     predictions = predictions[keep]
-    scores = predictions.get_field("scores")
+    scores = scores[keep]
     _, idx = scores.sort(0, descending=True)
-    return predictions[idx[0]]
+    return predictions[idx]
 
-def select_top_predictions(predictions, confidence_threshold=0.0):
+#origianl threshold = 0.2
+def select_top_predictions(predictions, confidence_threshold=0.2):
     """
     Select only predictions which have a `score` > self.confidence_threshold,
     and returns the predictions in descending order of score
@@ -52,6 +49,16 @@ def compute_colors_for_labels(labels, palette = torch.tensor([2 ** 25 - 1, 2 ** 
     Simple function that adds fixed colors depending on the class
     """
     colors = labels[:, None] * palette
+    colors = (colors % 255).numpy().astype("uint8")
+    return colors
+
+def compute_colors_for_idx_pairs(idx_pairs, palette = torch.tensor([2 ** 25 - 1, 2 ** 15 - 1, 2 ** 21 - 1])):
+    """
+    Simple function that adds fixed colors depending on the class
+    """
+    temp = torch.ones((idx_pairs.size(0), 1),  dtype=torch.int64)
+    idx_pairs = torch.cat((temp, idx_pairs), 1)
+    colors = idx_pairs[:, None] * palette
     colors = (colors % 255).numpy().astype("uint8")
     return colors
 
@@ -98,34 +105,6 @@ def overlay_boxes(image, predictions):
 
     return image
 
-
-def overlay_pred_names(image, predictions, categories):
-    scores = predictions.get_field("scores").tolist()
-    idx_pairs = predictions.get_field("idx_pairs").tolist()
-    idx_pairs = [[categories[j] for j in i] for i in idx_pairs]
-    boxes = predictions.bbox
-
-    template = "{}: {:.2f}"
-    for box, score, prediction in zip(boxes, scores, idx_pairs):
-        w1, h1 = np.abs(box[:2] - box[2:4])
-        x1, y1 = (box[0] + w1/2, box[1] + h1/2)
-        x1 = round(x1.item())
-        y1 = round(y1.item())
-
-        w2, h2 = np.abs(box[4:6] - box[6:8])
-        x2, y2 = (box[4] + w2/2, box[5] + h2/2)
-        x2 = round(x2.item())
-        y2 = round(y2.item())
-        s1 = template.format(prediction[0], np.average(score))
-        s2 = template.format(prediction[1], np.average(score))
-        cv2.putText(
-            image, s1, (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, .5, (255, 255, 255), 1
-        )
-        cv2.putText(
-            image, s2, (x2, y2), cv2.FONT_HERSHEY_SIMPLEX, .5, (255, 255, 255), 1
-        )
-    return image
-
 def overlay_class_names(image, predictions, categories):
     """
     Adds detected class names and scores in the positions defined by the
@@ -137,17 +116,20 @@ def overlay_class_names(image, predictions, categories):
     """
     scores = predictions.get_field("scores").tolist()
     labels = predictions.get_field("labels").tolist()
+    colors = compute_colors_for_labels(predictions.get_field("labels")).tolist()
     labels = [categories[i] for i in labels]
     boxes = predictions.bbox
 
+
+
     template = "{}: {:.2f}"
-    for box, score, label in zip(boxes, scores, labels):
+    for box, score, label, color in zip(boxes, scores, labels, colors):
         x, y = box[:2]
         x = round(x.item())
         y = round(y.item()+20)
         s = template.format(label, score)
         cv2.putText(
-            image, s, (x, y), cv2.FONT_HERSHEY_SIMPLEX, .5, (255, 255, 255), 1
+            image, s, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.7, tuple(color), 1, cv2.LINE_AA
         )
 
     return image
@@ -171,8 +153,14 @@ def overlay_question_answers(image, qas, max_num=10):
         )
     return image
 
-def generate_graph(predictions, pred_predictions, categories, predicates):
-    G = nx.Graph()
+def hash_tensor(tesnor):
+    hash = ""
+    for i in tesnor:
+        hash += str(i)
+    return hash
+
+def generate_graph(img_id, predictions, pred_predictions, categories, predicates):
+    G = nx.DiGraph()
     labeldict = {}
     edge_labeldict = {}
 
@@ -181,23 +169,50 @@ def generate_graph(predictions, pred_predictions, categories, predicates):
     labels = [categories[i] for i in labels]
     boxes = predictions.bbox
 
-    # for box, score, label in zip(boxes, scores, labels):
-    #     G.add_node(str(box))
-        # labeldict[str(box)] = label
+    for num, (box, score, label) in enumerate(zip(boxes, scores, labels)):
+        box = hash_tensor(box.int())
+        G.add_node(box)
+        labeldict[box] = label
 
 
     pred_scores = pred_predictions.get_field("scores").tolist()
+    pred_scores = max(pred_scores)
     idx_pairs = pred_predictions.get_field("idx_pairs").tolist()
-    idx_pairs = [[predicates[j] for j in i] for i in idx_pairs]
-    pred_boxes = predictions.bbox
+    temp_idx_pairs = []
+    for i in idx_pairs:
+        if i[0] + 1 > len(predicates) or i[1]+1 > len(predicates):
+            #Sometimes too large idenxes are computed.
+            continue
+        temp_idx_pairs.append([predicates[i[0]], predicates[1]])
+    idx_pairs = temp_idx_pairs
+    pred_boxes = pred_predictions.bbox
 
-    for pred_box, pred_score, prediction, box, score, label in zip(pred_boxes, pred_scores, idx_pairs, boxes, scores, labels):
+
+
+    for num, (pred_box, pred_score, predicate, box, score, label) in enumerate(zip(pred_boxes, pred_scores, idx_pairs, boxes, scores, labels)):
+        pred_box = pred_box.int()
         b1 = pred_box[:4]
-        b2 = pred_box[5:8]
-        labeldict[b1] = prediction[0]
-        labeldict[b2] = prediction[1]
-        edge_labeldict[box] = "{}: {}".format(label,score)
-        G.add_edge(b1, b2)
+        b2 = pred_box[4:8]
 
+        n1 = None
+        n2 = None
 
+        for box in boxes:
+            box = box.int()
+            eq_1 = torch.eq(b1, box)
+            eq_2 = torch.eq(b2, box)
+            eq_all_1 = torch.all(eq_1)
+            eq_all_2 = torch.all(eq_2)
+            if eq_all_1:
+                n1 = box
+                pred = predicate[0]
+                score = pred_score
+            if eq_all_2:
+                n2 = box
+
+        if n1 is not None and n2 is not None:
+            h1 = hash_tensor(n1)
+            h2 = hash_tensor(n2)
+            edge_labeldict[(h1,h2)] = "{}: {}".format(pred,round(score,2))
+            G.add_edge(h1, h2)
     return G, labeldict, edge_labeldict
