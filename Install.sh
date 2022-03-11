@@ -17,6 +17,16 @@ az login
 
 cd ~
 
+#disable unattended upgrade
+edit /etc/apt/apt.conf.d/20auto-upgrades
+
+    APT::Periodic::Update-Package-Lists "1";
+    APT::Periodic::Download-Upgradeable-Packages "1";
+    APT::Periodic::AutocleanInterval "7";
+    APT::Periodic::Unattended-Upgrade "1";
+#set APT::Periodic::Unattended-Upgrade to "0"
+
+
 sudo adduser admin92
 usermod -aG sudo admin92
 
@@ -24,7 +34,21 @@ sudo apt-get install ubuntu-drivers-common
 sudo ubuntu-drivers devices
 sudo apt update
 sudo apt-get install nvidia-driver-390
-
+sudo nano /etc/apt/sources.list
+#Add following files
+#deb http://dk.archive.ubuntu.com/ubuntu/ xenial main
+#deb http://dk.archive.ubuntu.com/ubuntu/ xenial universe
+sudo apt update
+sudo apt install g++-5
+sudo apt install gcc-5
+sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-5 5
+sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-5 5
+sudo update-alternatives --config gcc
+sudo update-alternatives --config g++
+sudo apt-get install libglib2.0-0
+sudo apt-get install libsm6
+sudo apt-get install git-all
+sudo apt-get install sshfs
 
 
 curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
@@ -39,7 +63,6 @@ sudo dpkg -i linux_f5cli.x86_64.deb
 #f5fpc -s -t vpn.univie.ac.at -u a1209967 -d /etc/ssl/certs/
 echo 'f5fpc -s -t vpn.univie.ac.at -u a1209967 -p <vpn_pwd> -d /etc/ssl/certs/'  >> ~/.bashrc
 
-sudo apt-get install sshfs
 sudo mkdir /mnt/ImageFactData
 #sudo sshfs adhofer@ImageFactData.cs.univie.ac.at:/./dataset /mnt/ImageFactData
 # echo 'umount /mnt/ImageFactData/' >> ~/.bashrc
@@ -51,18 +74,6 @@ echo <vm_pwd> | sudo sshfs -o allow_other -o password_stdin adhofer@ImageFactDat
 echo 'sudo sshfs -o allow_other -o password_stdin adhofer@ImageFactData.cs.univie.ac.at:/./dataset /mnt/ImageFactData <<< <vm_pwd>' >> ~/.bashrc
 source ~/.bashrc
 
-sudo nano /etc/apt/sources.list
-#Add following files
-#deb http://dk.archive.ubuntu.com/ubuntu/ xenial main
-#deb http://dk.archive.ubuntu.com/ubuntu/ xenial universe
-sudo apt update
-
-sudo apt install g++-5
-sudo apt install gcc-5
-sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-5 5
-sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-5 5
-sudo update-alternatives --config gcc
-sudo update-alternatives --config g++
 #sudo apt install nfs-common
 #sudo apt install cifs-utils
 
@@ -74,7 +85,7 @@ conda activate sg
 python -V
 
 conda install pytorch==1.0.1 torchvision==0.2.2 cudatoolkit=9.0 -c pytorch
-echo 'export CUDA_HOME=/usr/local/cuda/' >> ~/.bashrc
+echo 'export CUDA_HOME=/usr/local/cuda-9.0/' >> ~/.bashrc
 wget https://developer.nvidia.com/compute/cuda/9.0/Prod/local_installers/cuda_9.0.176_384.81_linux-run
 sudo sh ./cuda_9.0.176_384.81_linux-run --no-opengl-libs --toolkit --silent --override
 
@@ -84,10 +95,7 @@ git clone https://github.com/Adlbert/graph-rcnn.pytorch.git
 cd graph-rcnn.pytorch 
 python -m pip install -r requirements.txt
 python -m pip install scipy
-sudo apt-get update
-sudo apt-get install libglib2.0-0
-sudo apt-get install libsm6
-sudo apt-get install git-all
+
 
 cd lib/scene_parser/rcnn
 python setup.py build develop
