@@ -4,7 +4,6 @@ import logging
 import time
 import numpy as np
 import torch
-import cv2
 from .data.build import build_data_loader
 from .scene_parser.parser import build_scene_parser
 from .scene_parser.parser import build_scene_parser_optimizer
@@ -14,10 +13,15 @@ from .scene_parser.rcnn.utils.comm import synchronize, all_gather, is_main_proce
 from .scene_parser.rcnn.utils.visualize import select_top_predictions, select_top_pred_predictions, overlay_boxes, overlay_class_names, generate_graph
 from .data.evaluation import evaluate, evaluate_sg
 from .utils.box import bbox_overlaps
+
 import networkx as nx
 import matplotlib
 matplotlib.use('agg')
 import matplotlib.pyplot as plt
+
+import cv2
+from lib.scene_parser.rcnn.structures.image_list import to_image_list
+
 
 class SceneGraphGeneration:
     """
@@ -330,6 +334,37 @@ class SceneGraphGeneration:
                             predictions_pred=predictions_pred,
                             output_folder=output_folder,
                             **extra_args)
+    def apply(self, img, image_id, timer=None, visualize=False):
+        """
+        main body for applying scene graph generation model
+        """
+        logger = logging.getLogger("scene_graph_generation.inference")
+        logger.info("Start evaluating")
+        self.scene_parser.eval()
+        cpu_device = torch.device("cpu")
+        total_timer = Timer()
+        total_timer.tic()
+
+        imgs = to_image_list(img)
+        imgs = imgs.to(self.device)
+
+        image_ids = [image_id]
+        
+        with torch.no_grad():
+            if timer:
+                timer.tic()
+            output = self.scene_parser(imgs)
+            if self.cfg.MODEL.RELATION_ON:
+                output, output_pred = output
+                output_pred = [o.to(cpu_device) for o in output_pred]
+            if timer:
+                torch.cuda.synchronize()
+                timer.toc()
+            output = [o.to(cpu_device) for o in output]
+            if visualize:
+                if(self.cfg.MODEL.RELATION_ON):
+                    self.visualize_graph(self.data_loader_test.dataset, image_ids, imgs, output, output_pred)
+                self.visualize_detection(self.data_loader_test.dataset, image_ids, imgs, output)
 
 def build_model(cfg, arguments, local_rank, distributed):
     return SceneGraphGeneration(cfg, arguments, local_rank, distributed)

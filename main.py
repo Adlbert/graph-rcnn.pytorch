@@ -11,6 +11,10 @@ import numpy as np
 import torch
 import datetime
 
+import cv2 as cv
+from lib.scene_parser.rcnn.structures.image_list import to_image_list
+
+
 from lib.config import cfg
 from lib.model import build_model
 from lib.scene_parser.rcnn.utils.miscellaneous import mkdir, save_config, get_timestamp
@@ -37,6 +41,26 @@ def test(cfg, args, model=None):
         model = build_model(cfg, arguments, args.local_rank, args.distributed)
     model.test(visualize=args.visualize)
 
+def apply(cfg, args, model=None):
+    """
+    apply scene graph generation model
+    """
+    img_id = args.id
+
+    img = cv.imread('/mnt/e/Uni/Master/repo/graph-rcnn.pytorch/dataset/test/' + args.image)
+    img = cv.resize(img, (1024,768))
+    img = cv.cvtColor(img, cv.COLOR_BGR2RGB)
+    img = img - np.array(cfg.INPUT.PIXEL_MEAN).reshape(1, 1, 3) # normalize
+    img = np.transpose(img, (2, 0, 1)) # hwc to chw
+    img = torch.from_numpy(img).float()
+
+    if model is None:
+        arguments = {}
+        arguments["iteration"] = 0
+        model = build_model(cfg, arguments, args.local_rank, args.distributed)
+
+    model.apply(img, img_id, visualize=args.visualize)
+
 def main():
     ''' parse config file '''
     parser = argparse.ArgumentParser(description="Scene Graph Generation")
@@ -46,6 +70,9 @@ def main():
     parser.add_argument("--resume", type=int, default=0)
     parser.add_argument("--batchsize", type=int, default=0)
     parser.add_argument("--inference", action='store_true')
+    parser.add_argument("--apply", action='store_true')
+    parser.add_argument("--image", type=str, default='test.jpg')
+    parser.add_argument("--id", type=int, default=0)
     parser.add_argument("--instance", type=int, default=-1)
     parser.add_argument("--use_freq_prior", action='store_true')
     parser.add_argument("--visualize", action='store_true')
@@ -83,10 +110,12 @@ def main():
     logger.info("Saving config into: {}".format(output_config_path))
     save_config(cfg, output_config_path)
 
-    if not args.inference:
+    if not args.inference and not args.apply:
         model = train(cfg, args)
-    else:
+    elif not args.apply:
         test(cfg, args)
+    else:
+        apply(cfg,args)
 
 if __name__ == "__main__":
     main()
