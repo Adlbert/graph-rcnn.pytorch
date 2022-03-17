@@ -88,7 +88,11 @@ def run(cfg, args, model=None):
             img = img - np.array(cfg.INPUT.PIXEL_MEAN).reshape(1, 1, 3) # normalize
             img = np.transpose(img, (2, 0, 1)) # hwc to chw
             img = torch.from_numpy(img).float()
-            model.apply(img, img_dto.imageId, visualize=args.visualize)
+            json_graph, labelDict, edgeDict = model.run(img, img_dto.imageId)
+            img_o.graph = json.dumps(json_graph)
+            img_o.labelDict = json.dumps(labelDict)
+            img_o.edgeDict = json.dumps(edgeDict)
+            dbservice.updateImage(imgfactconfig, img_o)
         else:
             logger.info("Nothing received. Waiting ...")
         time.sleep(2) # Sleep for 2 seconds

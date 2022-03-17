@@ -15,6 +15,7 @@ from .data.evaluation import evaluate, evaluate_sg
 from .utils.box import bbox_overlaps
 
 import networkx as nx
+from networkx.readwrite import json_graph
 import matplotlib
 matplotlib.use('agg')
 import matplotlib.pyplot as plt
@@ -223,6 +224,7 @@ class SceneGraphGeneration:
             top_prediction = select_top_predictions(prediction)
             top_pred_prediction = select_top_pred_predictions(pred_predictions)
             G, labeldict, edge_labeldict = generate_graph(img_ids[i], top_prediction, top_pred_prediction, dataset.ind_to_classes, dataset.ind_to_predicates)
+            json_graph.node_link_data(G)
             pos = nx.spring_layout(G)
             plt.figure(figsize=(15,25))
             nx.draw(G,pos, labels=labeldict, with_labels = True)
@@ -233,6 +235,13 @@ class SceneGraphGeneration:
             )
             plt.savefig(os.path.join(visualize_folder, "graph_{}.jpg".format(img_ids[i])), format="JPG")
             plt.close()
+    
+    def generate_graph(self, dataset, img_ids, imgs, predictions, pred_predictions):
+        for i, (prediction, pred_predictions) in enumerate(zip(predictions, pred_predictions)):
+            top_prediction = select_top_predictions(prediction)
+            top_pred_prediction = select_top_pred_predictions(pred_predictions)
+            G, labeldict, edge_labeldict = generate_graph(img_ids[i], top_prediction, top_pred_prediction, dataset.ind_to_classes, dataset.ind_to_predicates)
+            return json_graph.node_link_data(G), labeldict, edge_labeldict
 
 
     def test(self, timer=None, visualize=False):
@@ -365,6 +374,36 @@ class SceneGraphGeneration:
                 if(self.cfg.MODEL.RELATION_ON):
                     self.visualize_graph(self.data_loader_test.dataset, image_ids, imgs, output, output_pred)
                 self.visualize_detection(self.data_loader_test.dataset, image_ids, imgs, output)
+    
+    def run(self, img, image_id, timer=None):
+        """
+        main body for run scene graph generation model in service
+        """
+        logger = logging.getLogger("scene_graph_generation.inference")
+        logger.info("Start evaluating")
+        self.scene_parser.eval()
+        cpu_device = torch.device("cpu")
+        total_timer = Timer()
+        total_timer.tic()
+
+        imgs = to_image_list(img)
+        imgs = imgs.to(self.device)
+
+        image_ids = [image_id]
+        
+        with torch.no_grad():
+            if timer:
+                timer.tic()
+            output = self.scene_parser(imgs)
+            if self.cfg.MODEL.RELATION_ON:
+                output, output_pred = output
+                output_pred = [o.to(cpu_device) for o in output_pred]
+            if timer:
+                torch.cuda.synchronize()
+                timer.toc()
+            output = [o.to(cpu_device) for o in output]
+            if(self.cfg.MODEL.RELATION_ON):
+                return self.generate_graph(self.data_loader_test.dataset, image_ids, imgs, output, output_pred)
 
 def build_model(cfg, arguments, local_rank, distributed):
     return SceneGraphGeneration(cfg, arguments, local_rank, distributed)
