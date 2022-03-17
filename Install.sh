@@ -49,6 +49,14 @@ sudo apt-get install libglib2.0-0
 sudo apt-get install libsm6
 sudo apt-get install git-all
 sudo apt-get install sshfs
+sudo su
+curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add -
+
+curl https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/prod.list > /etc/apt/sources.list.d/mssql-release.list
+
+exit
+sudo apt-get update
+sudo ACCEPT_EULA=Y apt-get install -y msodbcsql17
 
 
 curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash

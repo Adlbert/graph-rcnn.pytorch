@@ -9,3 +9,5 @@ dill
 opencv-python
 pycocotools
 networkx
+azure-servicebus
+pyodbc

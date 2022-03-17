@@ -295,3 +295,7 @@ If you want to visualize some examples, you just simple append the command with:
 ## Acknowledgement
 
 We appreciate much the nicely organized code developed by [maskrcnn-benchmark](https://github.com/facebookresearch/maskrcnn-benchmark). Our codebase is built mostly based on it.
+
+
+## Imagefact
+ python main.py --config-file configs/sgg_res101_step.local.yaml --service

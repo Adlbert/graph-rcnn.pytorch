@@ -13,7 +13,14 @@ import datetime
 
 import cv2 as cv
 from lib.scene_parser.rcnn.structures.image_list import to_image_list
+from imagefactazlib.messenger import messengerservice
+from imagefactazlib.database import dbservice
+from imagefactazlib.util import util as utilservice
 
+
+import json
+with open('config.json') as c:
+    imgfactconfig = json.load(c)
 
 from lib.config import cfg
 from lib.model import build_model
@@ -61,6 +68,20 @@ def apply(cfg, args, model=None):
 
     model.apply(img, img_id, visualize=args.visualize)
 
+def run(cfg, args, model=None):
+    # if model is None:
+    #     arguments = {}
+    #     arguments["iteration"] = 0
+    #     model = build_model(cfg, arguments, args.local_rank, args.distributed)
+    while(True):
+        recevied, img_dto = messengerservice.receive(imgfactconfig)
+        if (recevied):
+            #logging.info("Received: {}".format(img_dto.imageId))
+            img_o = dbservice.getImage(imgfactconfig, img_dto)
+            img_cv = utilservice.load(img_o)
+            model.apply(img_cv, img_dto.img_id, visualize=args.visualize)
+
+
 def main():
     ''' parse config file '''
     parser = argparse.ArgumentParser(description="Scene Graph Generation")
@@ -77,6 +98,7 @@ def main():
     parser.add_argument("--use_freq_prior", action='store_true')
     parser.add_argument("--visualize", action='store_true')
     parser.add_argument("--algorithm", type=str, default='sg_baseline')
+    parser.add_argument("--service", action='store_true')
     args = parser.parse_args()
 
     num_gpus = int(os.environ["WORLD_SIZE"]) if "WORLD_SIZE" in os.environ else 1
@@ -110,12 +132,14 @@ def main():
     logger.info("Saving config into: {}".format(output_config_path))
     save_config(cfg, output_config_path)
 
-    if not args.inference and not args.apply:
+    if not args.inference and not args.apply and not args.service:
         model = train(cfg, args)
-    elif not args.apply:
+    elif not args.apply and not args.service:
         test(cfg, args)
-    else:
+    elif not args.service:
         apply(cfg,args)
+    else:
+        run(cfg,args)
 
 if __name__ == "__main__":
     main()

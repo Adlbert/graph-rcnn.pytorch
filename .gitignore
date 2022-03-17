@@ -3,6 +3,7 @@ results/
 visualize/
 logs/
 dataset/
+config.json
 
 freq_prior.npy
 
