@@ -10,6 +10,8 @@ import argparse
 import numpy as np
 import torch
 import datetime
+import logging
+import time
 
 import cv2 as cv
 from lib.scene_parser.rcnn.structures.image_list import to_image_list
@@ -69,17 +71,29 @@ def apply(cfg, args, model=None):
     model.apply(img, img_id, visualize=args.visualize)
 
 def run(cfg, args, model=None):
-    # if model is None:
-    #     arguments = {}
-    #     arguments["iteration"] = 0
-    #     model = build_model(cfg, arguments, args.local_rank, args.distributed)
+    if model is None:
+        arguments = {}
+        arguments["iteration"] = 0
+        model = build_model(cfg, arguments, args.local_rank, args.distributed)
+    logger = logging.getLogger("scene_graph_generation.azure.messenger")
+    logger.info("Started messenger")
     while(True):
         recevied, img_dto = messengerservice.receive(imgfactconfig)
         if (recevied):
-            #logging.info("Received: {}".format(img_dto.imageId))
+            logger.info("Received: {}".format(img_dto.imageId))
             img_o = dbservice.getImage(imgfactconfig, img_dto)
             img_cv = utilservice.load(img_o)
-            model.apply(img_cv, img_dto.img_id, visualize=args.visualize)
+            img = cv.resize(img_cv, (1024,768))
+            img = cv.cvtColor(img, cv.COLOR_BGR2RGB)
+            img = img - np.array(cfg.INPUT.PIXEL_MEAN).reshape(1, 1, 3) # normalize
+            img = np.transpose(img, (2, 0, 1)) # hwc to chw
+            img = torch.from_numpy(img).float()
+            model.apply(img, img_dto.imageId, visualize=args.visualize)
+        else:
+            logger.info("Nothing received. Waiting ...")
+        time.sleep(2) # Sleep for 2 seconds
+
+
 
 
 def main():

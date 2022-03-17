@@ -176,6 +176,8 @@ def generate_graph(img_id, predictions, pred_predictions, categories, predicates
 
 
     pred_scores = pred_predictions.get_field("scores").tolist()
+    if len(pred_scores) == 0:
+        return G, labeldict, edge_labeldict
     pred_scores = max(pred_scores)
     idx_pairs = pred_predictions.get_field("idx_pairs").tolist()
     temp_idx_pairs = []
