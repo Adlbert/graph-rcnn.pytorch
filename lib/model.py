@@ -403,6 +403,11 @@ class SceneGraphGeneration:
                 timer.toc()
             output = [o.to(cpu_device) for o in output]
             if(self.cfg.MODEL.RELATION_ON):
+                try:
+                    self.visualize_detection(self.data_loader_test.dataset, image_ids, imgs, output)
+                    self.visualize_graph(self.data_loader_test.dataset, image_ids, imgs, output, output_pred)
+                except Exception as e:
+                    print(e)
                 return self.generate_graph(self.data_loader_test.dataset, image_ids, imgs, output, output_pred)
 
 def build_model(cfg, arguments, local_rank, distributed):

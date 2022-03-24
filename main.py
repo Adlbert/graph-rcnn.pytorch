@@ -91,7 +91,7 @@ def run(cfg, args, model=None):
             json_graph, labelDict, edgeDict = model.run(img, img_dto.imageId)
             img_o.graph = json.dumps(json_graph)
             img_o.labelDict = json.dumps(labelDict)
-            img_o.edgeDict = json.dumps(edgeDict)
+            #img_o.edgeDict = json.dumps(edgeDict)
             dbservice.updateImage(imgfactconfig, img_o)
         else:
             logger.info("Nothing received. Waiting ...")

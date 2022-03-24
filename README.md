@@ -298,4 +298,13 @@ We appreciate much the nicely organized code developed by [maskrcnn-benchmark](h
 
 
 ## Imagefact
- python main.py --config-file configs/sgg_res101_step.local.yaml --service
+
+Onpen in WSL if on Windows
+
+python main.py --config-file configs/sgg_res101_step.local.yaml --service
+
+Conda:
+    conda activate sg
+
+Install Azure lib:
+    pip install ../imagefact/azure-lib/dist/imagefact_azure_lib-0.0.1-py3-none-any.whl
