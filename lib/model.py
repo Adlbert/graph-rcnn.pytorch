@@ -220,12 +220,12 @@ class SceneGraphGeneration:
         visualize_folder = "visualize"
         if not os.path.exists(visualize_folder):
             os.mkdir(visualize_folder)
-        for i, (prediction, pred_predictions) in enumerate(zip(predictions, pred_predictions)):
+        for i, (prediction, pred_prediction) in enumerate(zip(predictions, pred_predictions)):
             top_prediction = select_top_predictions(prediction)
-            top_pred_prediction = select_top_pred_predictions(pred_predictions)
-            G, labeldict, edge_labeldict = generate_graph(img_ids[i], top_prediction, top_pred_prediction, dataset.ind_to_classes, dataset.ind_to_predicates)
+            top_pred_prediction = select_top_pred_predictions(pred_prediction)
+            G, labeldict, edge_labeldict = generate_graph(img_ids[i], prediction, pred_prediction, dataset.ind_to_classes, dataset.ind_to_predicates)
             json_graph.node_link_data(G)
-            pos = nx.spring_layout(G)
+            pos = nx.circular_layout(G)
             plt.figure(figsize=(15,25))
             nx.draw(G,pos, labels=labeldict, with_labels = True)
             nx.draw_networkx_edge_labels(
@@ -343,6 +343,35 @@ class SceneGraphGeneration:
                             predictions_pred=predictions_pred,
                             output_folder=output_folder,
                             **extra_args)
+    def apply_ipynb(self, img, image_id, timer=None, visualize=False):
+        """
+        main body for applying scene graph generation model
+        """
+        logger = logging.getLogger("scene_graph_generation.inference")
+        logger.info("Start evaluating")
+        self.scene_parser.eval()
+        cpu_device = torch.device("cpu")
+        total_timer = Timer()
+        total_timer.tic()
+
+        imgs = to_image_list(img)
+        imgs = imgs.to(self.device)
+
+        image_ids = [image_id]
+        
+        with torch.no_grad():
+            if timer:
+                timer.tic()
+            output = self.scene_parser(imgs)
+            if self.cfg.MODEL.RELATION_ON:
+                output, output_pred = output
+                output_pred = [o.to(cpu_device) for o in output_pred]
+            if timer:
+                torch.cuda.synchronize()
+                timer.toc()
+            output = [o.to(cpu_device) for o in output]
+            return self.data_loader_test.dataset, image_ids, imgs, output, output_pred
+
     def apply(self, img, image_id, timer=None, visualize=False):
         """
         main body for applying scene graph generation model
