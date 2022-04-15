@@ -174,9 +174,10 @@ def generate_graph(img_id, predictions, pred_predictions, categories, predicates
 
     
     for num, (box, score, label) in enumerate(zip(boxes, scores, labels)):
-        box = hash_tensor(box.int())
-        G.add_node(num)
-        labeldict[num] = label
+        if label in LABELS_FILTER:
+            box = hash_tensor(box.int())
+            G.add_node(num)
+            labeldict[num] = label
 
     pred_scores = pred_predictions.get_field("scores")
     idx_pairs = pred_predictions.get_field("idx_pairs").tolist()
@@ -186,8 +187,8 @@ def generate_graph(img_id, predictions, pred_predictions, categories, predicates
         idx_1 = idx_pair[1]
         add = True
         if idx_0 in labeldict and labeldict[idx_0] in LABELS_FILTER and idx_1 in labeldict and labeldict[idx_1] in LABELS_FILTER:
-            m = torch.max(pred_score[1:51])
-            if m.item() > 0.2:
+            m = torch.max(pred_score[0:51])
+            if m.item() > 0.0:
                 index = (pred_score == m).nonzero().flatten()
                 p = predicates[index]
                 key = (idx_0,idx_1)
