@@ -154,164 +154,61 @@ def overlay_question_answers(image, qas, max_num=10):
         )
     return image
 
-def hash_tensor(tesnor):
-    hash = ""
-    for i in tesnor:
-        hash += str(i.item())
-    return hash
-
-def generate_graph(img_id, predictions, pred_predictions, categories, predicates):
+def build_graph(img_size, prediction, prediction_pred, labels, predicates):
     G = nx.DiGraph()
     labeldict = {}
     edge_labeldict = {}
 
-    scores = predictions.get_field("scores").tolist()
-    labels = predictions.get_field("labels").tolist()
-    labels = [categories[i] for i in labels]
-    boxes = predictions.bbox
-    LABELS_FILTER = ['man', 'face', 'woman', 'hand', 'head'] 
-    # LABELS_FILTER = labels
+    image_width = img_size[0]
+    image_height = img_size[1]
+    prediction = prediction.resize((image_width, image_height))
+    obj_scores = prediction.get_field("scores").numpy()
+    all_rels = prediction_pred.get_field("idx_pairs").numpy()
+    fp_pred = prediction_pred.get_field("scores").numpy()
 
-    
-    for num, (box, score, label) in enumerate(zip(boxes, scores, labels)):
-        if label in LABELS_FILTER:
-            box = hash_tensor(box.int())
-            G.add_node(num)
-            labeldict[num] = label
+    scores = np.column_stack((
+        obj_scores[all_rels[:,0]],
+        obj_scores[all_rels[:,1]],
+        fp_pred[:, 1:].max(1)
+    )).prod(1)
+    sorted_inds = np.argsort(-scores)
+    sorted_inds = sorted_inds[scores[sorted_inds] > 0] #[:100]
 
-    pred_scores = pred_predictions.get_field("scores")
-    idx_pairs = pred_predictions.get_field("idx_pairs").tolist()
+    pred_entry = {
+        'pred_boxes': prediction.bbox.numpy(),
+        'pred_classes': prediction.get_field("labels").numpy(),
+        'obj_scores': prediction.get_field("scores").numpy(),
+        'pred_rel_inds': all_rels[sorted_inds], #object to subject index. List is a realtionship for each score. In each list element the index of subject and object in pred_boxes, pred_classesoir obj_scores is saved
+        'rel_scores': fp_pred[sorted_inds], #Score for each possible relation label
+    }
 
-    for idx_pair, pred_score in zip(idx_pairs, pred_scores):
-        idx_0 = idx_pair[0]
-        idx_1 = idx_pair[1]
-        add = True
-        if idx_0 in labeldict and labeldict[idx_0] in LABELS_FILTER and idx_1 in labeldict and labeldict[idx_1] in LABELS_FILTER:
-            m = torch.max(pred_score[0:51])
-            if m.item() > 0.0:
-                index = (pred_score == m).nonzero().flatten()
-                p = predicates[index]
-                key = (idx_0,idx_1)
+    for ind_pair, pred_score in zip(pred_entry['pred_rel_inds'], pred_entry['rel_scores']):
+        ind_subject = ind_pair[0]
+        ind_object = ind_pair[1]
+        subject_label_ind = pred_entry['pred_classes'][ind_subject]
+        object_label_ind = pred_entry['pred_classes'][ind_object]
+        subject_box = pred_entry['pred_boxes'][ind_subject]
+        object_box = pred_entry['pred_boxes'][ind_object]
+        subject_score = pred_entry['obj_scores'][ind_subject]
+        object_score = pred_entry['obj_scores'][ind_object]
+        rel_ind = np.argmax(pred_score)
+        subject_label = labels[subject_label_ind]
+        object_label = labels[object_label_ind]
+        rel_score = pred_score[rel_ind]
+        rel_label = predicates[rel_ind]
+        subject_tuple = box_to_tuple(subject_box)
+        object_tuple = box_to_tuple(object_box)
 
-                this_start_label = labels[idx_0]
-                this_end_label = labels[idx_1]
-                for edge in list(G.edges):
-                    start = edge[0]
-                    end = edge[1]
-                    if idx_1 == end:
-                        start_label = labels[start]
-                        end_label = labels[end]
-                        edge_label = edge_labeldict[(start,end)]
-                        predicate = edge_label.split(': ')[0]
-                        score = float(edge_label.split(': ')[1])
-                        if start_label == this_start_label and end_label == this_end_label and predicate == p:
-                            add = score < m.item()
-                            if add:
-                                G.remove_edge(start, end)
+        G.add_node(subject_tuple)
+        G.add_node(object_tuple)
+        labeldict[subject_tuple] = "{}: {}".format(subject_label,round(subject_score,2))
+        labeldict[object_tuple] = "{}: {}".format(object_label,round(object_score,2))
 
-                if add:
-                    G.add_edge(idx_0, idx_1)
-                    edge_labeldict[key] = "{}: {}".format(p,round(m.item(),2))
+        G.add_edge(subject_tuple, object_tuple)
+        edge_labeldict[(subject_tuple, object_tuple)] = "{}: {}".format(rel_label,round(rel_score,2))
 
     return G, labeldict, edge_labeldict
 
+def box_to_tuple(box):
+    return (float(box[0]), float(box[1]), float(box[2]), float(box[0]))
 
-
-
-def generate_top_graph(img_id, predictions, pred_predictions, categories, predicates):
-    G_in = nx.DiGraph()
-    G_out = nx.DiGraph()
-    labeldict = {}
-    edge_labeldict = {}
-
-    LABELS_FILTER = ['man', 'face', 'woman', 'hand', 'head'] 
-    scores = predictions.get_field("scores").tolist()
-    labels = predictions.get_field("labels").tolist()
-    labels = [categories[i] for i in labels]
-    label_mask = [l in LABELS_FILTER for l in labels]
-    # labels = list(compress(labels,label_mask))
-    boxes = predictions.bbox
-    # boxes = list(compress(boxes,label_mask))
-
-    for num, (box, score, label) in enumerate(zip(boxes, scores, labels)):
-        box = hash_tensor(box.int())
-        G_in.add_node(box)
-        G_out.add_node(box)
-        labeldict[box] = label
-
-
-    pred_scores = pred_predictions.get_field("scores")
-    # pred_scores = pred_scores.max(1)[0].tolist()
-    if len(pred_scores) == 0:
-        return G_in, labeldict, edge_labeldict
-    idx_pairs = pred_predictions.get_field("idx_pairs").tolist()
-    named_idx_pairs = []
-    for i in idx_pairs:
-        if i[0] + 1 > len(predicates) or i[1]+1 > len(predicates):
-            #Sometimes too large idenxes are computed.
-            continue
-        named_idx_pairs.append([predicates[i[0]], predicates[i[1]]])
-    pred_boxes = pred_predictions.bbox
-
-    pred_score_dict = dict()
-    n  = 0
-    calls  = 0
-    l_1 = list()
-    l_2 = list()
-    for pred_box, named_pred, pred_score in zip(pred_boxes, named_idx_pairs, pred_scores):
-        pred_box = pred_box.int()
-        b1 = pred_box[:4]
-        b2 = pred_box[4:8]
-
-        n1 = None
-        n2 = None
-
-        for box in boxes:
-            box = box.int()
-            eq_1 = torch.eq(b1, box)
-            eq_2 = torch.eq(b2, box)
-            eq_all_1 = torch.all(eq_1)
-            eq_all_2 = torch.all(eq_2)
-            if eq_all_1:
-                n1 = box
-                m = torch.max(pred_score[1:50])
-                index = (pred_score == m).nonzero().flatten()
-                p1 = predicates[index]
-            if eq_all_2:
-                n2 = box
-                m = torch.max(pred_score[1:50])
-                index = (pred_score == m).nonzero().flatten()
-                p2 = predicates[index]
-
-        if n1 is not None and n2 is not None:
-            calls += 1
-            h1 = hash_tensor(n1)
-            h2 = hash_tensor(n2)
-            key_1 = (h1,h2)
-            key_2 = (h2,h1)
-            if key_1 not in pred_score_dict:
-                G_in.add_edge(h1, h2)
-                l_1.append(key_1)
-                n +=1 
-                edge_labeldict[key_1] = "{}: {}".format(p1,round(score,2))
-                pred_score_dict[key_1] = score
-            elif score > pred_score_dict[key_1]:
-                edge_labeldict.pop(key_1)
-                edge_labeldict[key_1] = "{}: {}".format(p1,round(score,2))
-                pred_score_dict[key_1] = score
-            else:
-                print(key_1)
-
-            if key_2 not in pred_score_dict:
-                G_out.add_edge(h2, h1)
-                l_2.append(key_2)
-                n +=1 
-                edge_labeldict[key_2] = "{}: {}".format(p2,round(score,2))
-                pred_score_dict[key_2] = score
-            elif score > pred_score_dict[key_2]:
-                edge_labeldict.pop(key_2)
-                edge_labeldict[key_2] = "{}: {}".format(p2,round(score,2))
-                pred_score_dict[key_2] = score
-            else:
-                print(key_2)
-    return G_out, labeldict, edge_labeldict
