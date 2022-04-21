@@ -3,6 +3,7 @@ import datetime
 import logging
 import time
 import numpy as np
+import json
 import torch
 from .data.build import build_data_loader
 from .scene_parser.parser import build_scene_parser
@@ -10,7 +11,7 @@ from .scene_parser.parser import build_scene_parser_optimizer
 from .scene_parser.rcnn.utils.metric_logger import MetricLogger
 from .scene_parser.rcnn.utils.timer import Timer, get_time_str
 from .scene_parser.rcnn.utils.comm import synchronize, all_gather, is_main_process, get_world_size
-from .scene_parser.rcnn.utils.visualize import select_top_predictions, select_top_pred_predictions, overlay_boxes, overlay_class_names, generate_graph
+from .scene_parser.rcnn.utils.visualize import select_top_predictions, select_top_pred_predictions, overlay_boxes, overlay_class_names, build_graph
 from .data.evaluation import evaluate, evaluate_sg
 from .utils.box import bbox_overlaps
 
@@ -215,33 +216,71 @@ class SceneGraphGeneration:
             result = overlay_class_names(result, top_prediction, dataset.ind_to_classes)
 
             cv2.imwrite(os.path.join(visualize_folder, "detection_{}.jpg".format(img_ids[i])), result)
+            
+
     
-    def visualize_graph(self, dataset, img_ids, imgs, predictions, pred_predictions):
+    def visualize_graph(self, dataset, img_ids, imgs, obj_preds, rel_preds):
         visualize_folder = "visualize"
         if not os.path.exists(visualize_folder):
             os.mkdir(visualize_folder)
-        for i, (prediction, pred_prediction) in enumerate(zip(predictions, pred_predictions)):
-            top_prediction = select_top_predictions(prediction)
-            top_pred_prediction = select_top_pred_predictions(pred_prediction)
-            G, labeldict, edge_labeldict = generate_graph(img_ids[i], prediction, pred_prediction, dataset.ind_to_classes, dataset.ind_to_predicates)
-            json_graph.node_link_data(G)
+        for i, (obj_pred, rel_pred) in enumerate(zip(obj_preds, rel_preds)):
+            # obj_pred = select_top_predictions(obj_pred)
+            # rel_pred = select_top_pred_predictions(rel_pred)
+            G, labeldict, edge_labeldict = build_graph(imgs.image_sizes[i], obj_pred, rel_pred, dataset.ind_to_classes, dataset.ind_to_predicates)
+            
+
+            json_string = {
+                'node_link_data': json_graph.node_link_data(G),
+                'labeldict': remap_keys(labeldict),
+                'edge_labeldict': remap_keys(edge_labeldict),
+            }
+            with open(os.path.join(visualize_folder, "data_{}.json".format(img_ids[i])), 'w') as outfile:
+                json.dump(json_string, outfile)
+
+            node_filter = []
+            labeldict_filtered = dict()
+            edge_labeldict_filtered = dict()
+            label_filter = ['man', 'woman']
+            for k,v in labeldict.items():
+                for label in label_filter:
+                    if label in v:
+                        node_filter.append(k)
+                        labeldict_filtered[k] = v
+
+            for k,v in edge_labeldict.items():
+                add = 0
+                for key in labeldict_filtered.keys():
+                    if key in k:
+                        add += 1
+                if add == 2:
+                    edge_labeldict_filtered[k] = v
+
+            G = nx.subgraph(G, node_filter)
             pos = nx.circular_layout(G)
             plt.figure(figsize=(15,25))
-            nx.draw(G,pos, labels=labeldict, with_labels = True)
+            nx.draw(G,pos, labels=labeldict_filtered, with_labels = True)
             nx.draw_networkx_edge_labels(
                 G,pos,
-                edge_labels=edge_labeldict,
+                edge_labels=edge_labeldict_filtered,
                 font_color='red'
             )
             plt.savefig(os.path.join(visualize_folder, "graph_{}.jpg".format(img_ids[i])), format="JPG")
             plt.close()
+
+
     
-    def generate_graph(self, dataset, img_ids, imgs, predictions, pred_predictions):
-        for i, (prediction, pred_predictions) in enumerate(zip(predictions, pred_predictions)):
-            top_prediction = select_top_predictions(prediction)
-            top_pred_prediction = select_top_pred_predictions(pred_predictions)
-            G, labeldict, edge_labeldict = generate_graph(img_ids[i], top_prediction, top_pred_prediction, dataset.ind_to_classes, dataset.ind_to_predicates)
-            return json_graph.node_link_data(G), labeldict, edge_labeldict
+    def generate_graph(self, dataset, img_ids, imgs, obj_preds, rel_preds):
+        graphs = dict()
+        for i, (obj_pred, rel_pred) in enumerate(zip(obj_preds, rel_preds)):
+            # obj_pred = select_top_predictions(obj_pred)
+            # rel_pred = select_top_pred_predictions(rel_pred)
+            G, labeldict, edge_labeldict = build_graph(imgs[i], obj_pred, rel_pred, dataset.ind_to_classes, dataset.ind_to_predicates)
+            graphs[img_ids[i]] = {
+                'node_link_data': json_graph.node_link_data(G),
+                'labeldict': labeldict,
+                'edge_labeldict': edge_labeldict,
+            }
+        return graphs
 
 
     def test(self, timer=None, visualize=False):
@@ -441,3 +480,5 @@ class SceneGraphGeneration:
 
 def build_model(cfg, arguments, local_rank, distributed):
     return SceneGraphGeneration(cfg, arguments, local_rank, distributed)
+def remap_keys(mapping):
+    return [{'key':k, 'value': v} for k, v in mapping.items()]
