@@ -54,21 +54,31 @@ def apply(cfg, args, model=None):
     """
     apply scene graph generation model
     """
-    img_id = args.id
-
-    img = cv.imread('/mnt/e/Uni/Master/repo/graph-rcnn.pytorch/dataset/test/' + args.image)
-    img = cv.resize(img, (1024,768))
-    img = cv.cvtColor(img, cv.COLOR_BGR2RGB)
-    img = img - np.array(cfg.INPUT.PIXEL_MEAN).reshape(1, 1, 3) # normalize
-    img = np.transpose(img, (2, 0, 1)) # hwc to chw
-    img = torch.from_numpy(img).float()
-
     if model is None:
         arguments = {}
         arguments["iteration"] = 0
         model = build_model(cfg, arguments, args.local_rank, args.distributed)
 
-    model.apply(img, img_id, visualize=args.visualize)
+    if args.id == -1:
+        for img_id in range(1,6):
+            img = cv.imread('/mnt/e/Uni/Master/repo/graph-rcnn.pytorch/dataset/test/test_' + str(img_id) + '.jpg')
+            img = cv.resize(img, (1024,768))
+            img = cv.cvtColor(img, cv.COLOR_BGR2RGB)
+            img = img - np.array(cfg.INPUT.PIXEL_MEAN).reshape(1, 1, 3) # normalize
+            img = np.transpose(img, (2, 0, 1)) # hwc to chw
+            img = torch.from_numpy(img).float()
+            model.apply(img, img_id, visualize=args.visualize)
+    else:
+        img_id = args.id
+
+        img = cv.imread('/mnt/e/Uni/Master/repo/graph-rcnn.pytorch/dataset/test/' + args.image)
+        img = cv.resize(img, (1024,768))
+        img = cv.cvtColor(img, cv.COLOR_BGR2RGB)
+        img = img - np.array(cfg.INPUT.PIXEL_MEAN).reshape(1, 1, 3) # normalize
+        img = np.transpose(img, (2, 0, 1)) # hwc to chw
+        img = torch.from_numpy(img).float()
+        model.apply(img, img_id, visualize=args.visualize)
+
 
 def run(cfg, args, model=None):
     if model is None:
@@ -111,7 +121,7 @@ def main():
     parser.add_argument("--inference", action='store_true')
     parser.add_argument("--apply", action='store_true')
     parser.add_argument("--image", type=str, default='test.jpg')
-    parser.add_argument("--id", type=int, default=0)
+    parser.add_argument("--id", type=int, default=-1)
     parser.add_argument("--instance", type=int, default=-1)
     parser.add_argument("--use_freq_prior", action='store_true')
     parser.add_argument("--visualize", action='store_true')

@@ -395,3 +395,7 @@ _C.SOLVER.CHECKPOINT_PERIOD = 2500
 _C.SOLVER.IMS_PER_BATCH = 16
 
 _C.PATHS_CATALOG = os.path.join(os.path.dirname(__file__), "paths_catalog.py")
+
+# Graph
+_C.GRAPH = CN()
+_C.GRAPH.FILTER = False

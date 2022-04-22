@@ -1,3 +1,4 @@
+from distutils.command.config import config
 import os
 import datetime
 import logging
@@ -217,51 +218,63 @@ class SceneGraphGeneration:
 
             cv2.imwrite(os.path.join(visualize_folder, "detection_{}.jpg".format(img_ids[i])), result)
             
+    def get_graph(self, img_size, obj_pred, rel_preds, labels_json, rel_json):
+            # obj_pred = select_top_predictions(obj_pred)
+            G, labeldict, edge_labeldict = build_graph(img_size, obj_pred, rel_preds, labels_json, rel_json)
+            return G, labeldict, edge_labeldict 
 
+    def filter_labeldict(self, G, labeldict):
+        node_filter = []
+        labeldict_filtered = dict()
+        label_filter = ['man', 'woman']
+        for k,v in labeldict.items():
+            for label in label_filter:
+                if label in v:
+                    node_filter.append(k)
+                    labeldict_filtered[k] = v
+        G = nx.subgraph(G, node_filter)
+        return G, labeldict_filtered
+
+    def filter_edgedict(self, labeldict_filtered, edge_labeldict):
+        edge_labeldict_filtered = dict()
+        for k,v in edge_labeldict.items():
+            add = 0
+            for key in labeldict_filtered.keys():
+                if key in k:
+                    add += 1
+            if add == 2:
+                edge_labeldict_filtered[k] = v
+        return edge_labeldict_filtered
+
+    def remap_keys(self, mapping):
+        return [{'key':k, 'value': v} for k, v in mapping.items()]
     
     def visualize_graph(self, dataset, img_ids, imgs, obj_preds, rel_preds):
         visualize_folder = "visualize"
         if not os.path.exists(visualize_folder):
             os.mkdir(visualize_folder)
         for i, (obj_pred, rel_pred) in enumerate(zip(obj_preds, rel_preds)):
-            # obj_pred = select_top_predictions(obj_pred)
-            # rel_pred = select_top_pred_predictions(rel_pred)
-            G, labeldict, edge_labeldict = build_graph(imgs.image_sizes[i], obj_pred, rel_pred, dataset.ind_to_classes, dataset.ind_to_predicates)
+            G, labeldict, edge_labeldict = self.get_graph(imgs.image_sizes[i], obj_pred, rel_pred, dataset.ind_to_classes, dataset.ind_to_predicates)
             
 
             json_string = {
                 'node_link_data': json_graph.node_link_data(G),
-                'labeldict': remap_keys(labeldict),
-                'edge_labeldict': remap_keys(edge_labeldict),
+                'labeldict': self.remap_keys(labeldict),
+                'edge_labeldict': self.remap_keys(edge_labeldict),
             }
             with open(os.path.join(visualize_folder, "data_{}.json".format(img_ids[i])), 'w') as outfile:
                 json.dump(json_string, outfile)
+            
+            if(self.cfg.GRAPH.FILTER):
+                G, labeldict = self.filter_labeldict(G, labeldict)
+                edge_labeldict = self.filter_edgedict(edge_labeldict)
 
-            node_filter = []
-            labeldict_filtered = dict()
-            edge_labeldict_filtered = dict()
-            label_filter = ['man', 'woman']
-            for k,v in labeldict.items():
-                for label in label_filter:
-                    if label in v:
-                        node_filter.append(k)
-                        labeldict_filtered[k] = v
-
-            for k,v in edge_labeldict.items():
-                add = 0
-                for key in labeldict_filtered.keys():
-                    if key in k:
-                        add += 1
-                if add == 2:
-                    edge_labeldict_filtered[k] = v
-
-            G = nx.subgraph(G, node_filter)
             pos = nx.circular_layout(G)
             plt.figure(figsize=(15,25))
-            nx.draw(G,pos, labels=labeldict_filtered, with_labels = True)
+            nx.draw(G,pos, labels=labeldict, with_labels = True)
             nx.draw_networkx_edge_labels(
                 G,pos,
-                edge_labels=edge_labeldict_filtered,
+                edge_labels=edge_labeldict,
                 font_color='red'
             )
             plt.savefig(os.path.join(visualize_folder, "graph_{}.jpg".format(img_ids[i])), format="JPG")
@@ -272,9 +285,7 @@ class SceneGraphGeneration:
     def generate_graph(self, dataset, img_ids, imgs, obj_preds, rel_preds):
         graphs = dict()
         for i, (obj_pred, rel_pred) in enumerate(zip(obj_preds, rel_preds)):
-            # obj_pred = select_top_predictions(obj_pred)
-            # rel_pred = select_top_pred_predictions(rel_pred)
-            G, labeldict, edge_labeldict = build_graph(imgs[i], obj_pred, rel_pred, dataset.ind_to_classes, dataset.ind_to_predicates)
+            G, labeldict, edge_labeldict = self.get_graph(imgs[i], obj_pred, rel_pred, dataset.ind_to_classes, dataset.ind_to_predicates)
             graphs[img_ids[i]] = {
                 'node_link_data': json_graph.node_link_data(G),
                 'labeldict': labeldict,
@@ -480,5 +491,3 @@ class SceneGraphGeneration:
 
 def build_model(cfg, arguments, local_rank, distributed):
     return SceneGraphGeneration(cfg, arguments, local_rank, distributed)
-def remap_keys(mapping):
-    return [{'key':k, 'value': v} for k, v in mapping.items()]

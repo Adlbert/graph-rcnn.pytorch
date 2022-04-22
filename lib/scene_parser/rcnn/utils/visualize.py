@@ -1,5 +1,6 @@
 import cv2
 import torch
+import json
 import numpy as np
 import networkx as nx
 from itertools import compress
@@ -26,7 +27,7 @@ def select_top_pred_predictions(predictions, confidence_threshold=0.0):
     return predictions[idx]
 
 #origianl threshold = 0.2
-def select_top_predictions(predictions, confidence_threshold=0.0):
+def select_top_predictions(predictions, confidence_threshold=0.2):
     """
     Select only predictions which have a `score` > self.confidence_threshold,
     and returns the predictions in descending order of score
@@ -182,7 +183,7 @@ def build_graph(img_size, prediction, prediction_pred, labels, predicates):
         'rel_scores': fp_pred[sorted_inds], #Score for each possible relation label
     }
 
-    for ind_pair, pred_score in zip(pred_entry['pred_rel_inds'], pred_entry['rel_scores']):
+    for ind_pair, rel_score in zip(pred_entry['pred_rel_inds'], pred_entry['rel_scores']):
         ind_subject = ind_pair[0]
         ind_object = ind_pair[1]
         subject_label_ind = pred_entry['pred_classes'][ind_subject]
@@ -191,21 +192,27 @@ def build_graph(img_size, prediction, prediction_pred, labels, predicates):
         object_box = pred_entry['pred_boxes'][ind_object]
         subject_score = pred_entry['obj_scores'][ind_subject]
         object_score = pred_entry['obj_scores'][ind_object]
-        rel_ind = np.argmax(pred_score)
+        rel_ind = np.argmax(rel_score)
         subject_label = labels[subject_label_ind]
         object_label = labels[object_label_ind]
-        rel_score = pred_score[rel_ind]
-        rel_label = predicates[rel_ind]
+        this_rel_score = rel_score[rel_ind]
+        this_rel_label = predicates[rel_ind]
+        rel_labels_scores = dict()
+        for i, score in enumerate(rel_score):
+            rel_labels_scores[predicates[i]] = float(score)
+        rel_labels_scores_json = json.dumps(rel_labels_scores)
         subject_tuple = box_to_tuple(subject_box)
         object_tuple = box_to_tuple(object_box)
 
-        G.add_node(subject_tuple)
-        G.add_node(object_tuple)
-        labeldict[subject_tuple] = "{}: {}".format(subject_label,round(subject_score,2))
-        labeldict[object_tuple] = "{}: {}".format(object_label,round(object_score,2))
+        if object_score > 0.6 and subject_score > 0.6:
+            G.add_node(subject_tuple)
+            G.add_node(object_tuple)
+            labeldict[subject_tuple] = "{}: {}".format(subject_label,round(subject_score,2))
+            labeldict[object_tuple] = "{}: {}".format(object_label,round(object_score,2))
 
-        G.add_edge(subject_tuple, object_tuple)
-        edge_labeldict[(subject_tuple, object_tuple)] = "{}: {}".format(rel_label,round(rel_score,2))
+            G.add_edge(subject_tuple, object_tuple)
+            # edge_labeldict[(subject_tuple, object_tuple)] = "{}: {}".format(this_rel_label,round(this_rel_score,2))
+            edge_labeldict[(subject_tuple, object_tuple)] = rel_labels_scores_json
 
     return G, labeldict, edge_labeldict
 
