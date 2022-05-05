@@ -197,22 +197,24 @@ def build_graph(img_size, prediction, prediction_pred, labels, predicates):
         object_label = labels[object_label_ind]
         this_rel_score = rel_score[rel_ind]
         this_rel_label = predicates[rel_ind]
-        rel_labels_scores = dict()
+        rel_labels_scores = list()
         for i, score in enumerate(rel_score):
-            rel_labels_scores[predicates[i]] = float(score)
-        rel_labels_scores_json = json.dumps(rel_labels_scores)
+            rel_labels_scores.append({'concept': predicates[i], 'score': float(score)})
+        # rel_labels_scores_json = json.dumps(rel_labels_scores)
         subject_tuple = box_to_tuple(subject_box)
         object_tuple = box_to_tuple(object_box)
 
         if object_score > 0.6 and subject_score > 0.6:
             G.add_node(subject_tuple)
             G.add_node(object_tuple)
-            labeldict[subject_tuple] = "{}: {}".format(subject_label,round(subject_score,2))
-            labeldict[object_tuple] = "{}: {}".format(object_label,round(object_score,2))
+            labeldict[subject_tuple] = {'concept': subject_label, 'score':float(round(subject_score,2))}
+            labeldict[object_tuple] = {'concept': object_label, 'score':float(round(object_score,2))}
+            # labeldict[subject_tuple] = "{}: {}".format(subject_label,round(subject_score,2))
+            # labeldict[object_tuple] = "{}: {}".format(object_label,round(object_score,2))
 
             G.add_edge(subject_tuple, object_tuple)
             # edge_labeldict[(subject_tuple, object_tuple)] = "{}: {}".format(this_rel_label,round(this_rel_score,2))
-            edge_labeldict[(subject_tuple, object_tuple)] = rel_labels_scores_json
+            edge_labeldict[(subject_tuple, object_tuple)] = rel_labels_scores
 
     return G, labeldict, edge_labeldict
 

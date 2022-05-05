@@ -246,8 +246,17 @@ class SceneGraphGeneration:
                 edge_labeldict_filtered[k] = v
         return edge_labeldict_filtered
 
-    def remap_keys(self, mapping):
-        return [{'key':k, 'value': v} for k, v in mapping.items()]
+    def remap_labeldict(self, mapping):
+        result = dict()
+        for k, v in mapping.items():
+            result[str(k)] = v
+        return result
+
+    def remap_edgelabeldict(self, mapping):
+        result = dict()
+        for k, v in mapping.items():
+            result[str(k)] = v
+        return result
     
     def visualize_graph(self, dataset, img_ids, imgs, obj_preds, rel_preds):
         visualize_folder = "visualize"
@@ -259,8 +268,8 @@ class SceneGraphGeneration:
 
             json_string = {
                 'node_link_data': json_graph.node_link_data(G),
-                'labeldict': self.remap_keys(labeldict),
-                'edge_labeldict': self.remap_keys(edge_labeldict),
+                'labeldict': self.remap_labeldict(labeldict),
+                'edge_labeldict': self.remap_edgelabeldict(edge_labeldict),
             }
             with open(os.path.join(visualize_folder, "data_{}.json".format(img_ids[i])), 'w') as outfile:
                 json.dump(json_string, outfile)
